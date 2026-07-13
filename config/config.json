@@ -1,0 +1,16 @@
+{
+  "yolo_model": "./models/yolo/sevnce_cls13_1280_20260604.pt",
+  "videomae_model": "./models/videomae",
+  "videomae": {
+    "num_frames": 16,
+    "threshold": 0.7,
+    "device": "auto"
+  },
+  "tracker": {
+    "min_conf": 0.3,
+    "delta_t": 3,
+    "inertia": 0.1,
+    "use_byte": false,
+    "min_hits": 1
+  }
+}

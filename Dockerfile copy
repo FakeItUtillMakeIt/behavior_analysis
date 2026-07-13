@@ -1,0 +1,12 @@
+# 1. 指定基础镜像
+FROM crystal_detect:v2
+
+# 2. 复制当前目录下的所有代码到镜像的 /app 目录
+WORKDIR /app
+COPY . .
+RUN chmod +x /app/detect_crystal/start_service.sh
+# 2. 声明容器运行时监听的端口（根据你的应用修改，例如 flask 默认是5000）
+EXPOSE 10235
+
+# 3. 定义容器启动时执行的命令
+ENTRYPOINT ["/app/start_service.sh"]
