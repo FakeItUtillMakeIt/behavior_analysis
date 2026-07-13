@@ -530,7 +530,7 @@ def detect_video_yolo_stream(video_path, yolo_model_path, scenario_ids, callback
                 break
         
         if frame_number % skip_frame == 0:
-            results = yolo_model.predict(frame, device="0")
+            results = yolo_model.predict(frame, device="0" if torch.cuda.is_available() else "cpu", verbose=False)
             
             # 获取检测结果
             det = []

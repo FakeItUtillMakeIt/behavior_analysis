@@ -1,3 +1,1 @@
-docker run -it --name freeze_detect_v1 --restart always -v /etc/localtime:/etc/localtime:ro -p 10235:10235  sevnce-registry-vpc.cn-chengdu.cr.aliyuncs.com/sevnce/anomaly:freeze1.0  /bin/bash -c "/root/start.sh"
-
- docker run -it --entrypoint /bin/bash  sevnce-registry.cn-chengdu.cr.aliyuncs.com/sevnce/anomaly:freeze1.0
+docker run -it --name behavior_analysis_v2.3 -v /etc/localtime:/etc/localtime:ro  --restart always -p 10233:10233 behavior_analysis:2.3 /bin/bash /root/start.sh
