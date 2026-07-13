@@ -14,9 +14,35 @@
 import numpy as np
 from logger import inner_logger as logger
 from rules.phone_tracking_manager import PhoneTrackingManager
+from station_detector import get_station_detector
 
 # 全局跟踪管理器实例
 _phone_tracking_manager = PhoneTrackingManager()
+
+# 岗位检测器实例
+_station_detector = None
+
+# 帧计数器（用于睡岗/离岗时序检测）
+_sleeping_counters = {}  # {station_id: frame_count}
+_absent_counters = {}    # {station_id: frame_count}
+
+# 配置阈值（从config.json加载）
+_person_gather_min_count = 3
+_sleeping_threshold = 30
+_absent_threshold = 30
+
+
+def load_scenario_config(config=None):
+    """加载场景检测配置"""
+    global _station_detector, _person_gather_min_count, _sleeping_threshold, _absent_threshold
+    
+    if config:
+        _person_gather_min_count = config.get('person_gather_min_count', 3)
+        _sleeping_threshold = config.get('sleeping_threshold', 30)
+        _absent_threshold = config.get('absent_threshold', 30)
+        _station_detector = get_station_detector(config)
+    else:
+        _station_detector = get_station_detector()
 
 
 # 类别ID常量
@@ -710,58 +736,133 @@ def person_wear_safety_belt_check(det):
     
     return no_safety_belt_num
 
-def person_gathering_check(det,thesh = 3):
+def person_gathering_check(det, frame_id=0, tracks=None):
     """聚集检测
 
     Args:
-        det (_type_): _description_
-        thesh (int, optional): 默认聚集人数.
+        det: 按类别分类的检测结果列表
+        frame_id: 当前帧ID（未使用）
+        tracks: 跟踪结果（未使用）
+    
+    Returns:
+        int: 聚集人数（超过阈值时返回）
     """
+    global _person_gather_min_count
+    
     logger.debug("check person_gathering_check")
     person_boxs = det[PERSON]
-    if len(person_boxs) < thesh:
+    if len(person_boxs) < _person_gather_min_count:
         return 0
-    min_left = min([box[0] for box in person_boxs])
-    min_top = min([box[1] for box in person_boxs])
-    max_right = max([box[2] for box in person_boxs])
-    max_bottom = max([box[3] for box in person_boxs])
-
+    
     return len(person_boxs)
 
-def person_sleeping_check(det):
+def person_sleeping_check(det, frame_id=0, tracks=None):
     """
-    睡岗检测
+    睡岗检测（基于岗位区域 + 帧计数）
     
     Args:
         det: 按类别分类的检测结果列表
+        frame_id: 当前帧ID
+        tracks: 原始跟踪结果 [x1,y1,x2,y2,track_id,conf,cls,track_length]
     
     Returns:
-        int: 睡岗人数
+        int: 睡岗岗位数量（触发告警的）
     """
+    global _sleeping_counters, _station_detector, _sleeping_threshold
+    
     logger.debug("check person_sleeping_check")
+    
+    if _station_detector is None:
+        _station_detector = get_station_detector()
     
     person_boxs = det[PERSON]
     sleeping_boxs = det[SLEEPING] if len(det) > SLEEPING else []
     
+    if not person_boxs or not sleeping_boxs:
+        return 0
+    
+    # 获取岗位区域
+    stations = _station_detector.get_all_stations(person_boxs, tracks, frame_id)
+    
+    if not stations:
+        return 0
+    
+    alarm_count = 0
+    
+    for station in stations:
+        station_id = station['track_id']
+        sleeping_detected = False
+        
+        # 检查岗位区域内是否有睡岗检测框
+        for sleep_box in sleeping_boxs:
+            sleep_center = ((sleep_box[0] + sleep_box[2]) / 2, (sleep_box[1] + sleep_box[3]) / 2)
+            
+            # 检查中心点是否在岗位区域内
+            if is_point_in_box(sleep_center, station['bbox']):
+                sleeping_detected = True
+                break
+        
+        if sleeping_detected:
+            _sleeping_counters[station_id] = _sleeping_counters.get(station_id, 0) + 1
+            if _sleeping_counters[station_id] >= _sleeping_threshold:
+                alarm_count += 1
+        else:
+            _sleeping_counters.pop(station_id, None)
+    
+    return alarm_count
+
+def person_absenteeism_check(det, frame_id=0, tracks=None):
+    """
+    离岗检测（基于岗位区域 + 帧计数）
+    
+    Args:
+        det: 按类别分类的检测结果列表
+        frame_id: 当前帧ID
+        tracks: 原始跟踪结果 [x1,y1,x2,y2,track_id,conf,cls,track_length]
+    
+    Returns:
+        int: 离岗岗位数量（触发告警的）
+    """
+    global _absent_counters, _station_detector, _absent_threshold
+    
+    logger.debug("check person_absenteeism_check")
+    
+    if _station_detector is None:
+        _station_detector = get_station_detector()
+    
+    person_boxs = det[PERSON]
+    
     if not person_boxs:
         return 0
     
-    if not sleeping_boxs:
+    # 获取岗位区域
+    stations = _station_detector.get_all_stations(person_boxs, tracks, frame_id)
+    
+    if not stations:
         return 0
     
-    sleeping_count = 0
+    alarm_count = 0
     
-    for person in person_boxs:
-        person_box = person[:4] if len(person) >= 4 else person
+    for station in stations:
+        station_id = station['track_id']
+        station_occupied = False
         
-        for sleeping in sleeping_boxs:
-            sleeping_center = ((sleeping[0] + sleeping[2]) / 2, (sleeping[1] + sleeping[3]) / 2)
-            if is_point_in_box(sleeping_center, person_box):
-                sleeping_count += 1
+        # 检查岗位区域内是否有人员
+        for person_box in person_boxs:
+            person_center = ((person_box[0] + person_box[2]) / 2, (person_box[1] + person_box[3]) / 2)
+            
+            if is_point_in_box(person_center, station['bbox']):
+                station_occupied = True
                 break
+        
+        if not station_occupied:
+            _absent_counters[station_id] = _absent_counters.get(station_id, 0) + 1
+            if _absent_counters[station_id] >= _absent_threshold:
+                alarm_count += 1
+        else:
+            _absent_counters.pop(station_id, None)
     
-    return sleeping_count
-
+    return alarm_count
 
 # ==================== 告警检测调度 ====================
 
@@ -777,6 +878,7 @@ ALARM_MAP = {
     6: person_wear_safety_belt_check,
     7: person_gathering_check,
     8: person_sleeping_check,
+    9: person_absenteeism_check
 }
 
 # 告警类型描述
@@ -796,7 +898,7 @@ ALARM_NAMES = {
 }
 
 # YOLO 场景检测 ID（使用传统检测）
-YOLO_SCENARIO_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+YOLO_SCENARIO_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 # VideoMAE 行为识别 ID
 VIDEOMAE_SCENARIO_IDS = [10, 11]
@@ -875,12 +977,15 @@ def run_scenario_checks(all_dets, scenario_ids, num_classes=14, track_info=None,
     
     results = {}
     
+    # 需要传递 tracks 和 frame_id 的场景ID
+    tracks_scenario_ids = [7, 8, 9]  # 聚集、睡岗、离岗
+    
     for scenario_id in scenario_ids:
         if scenario_id in ALARM_MAP:
             check_func = ALARM_MAP[scenario_id]
             try:
-                # 对于移动打电话场景，需要传递 tracks 和 frame_id
-                if scenario_id == 8:  # person_using_moving_phone_check
+                # 对于需要 tracks 的场景，传递 tracks 和 frame_id
+                if scenario_id in tracks_scenario_ids or scenario_id == 8:  # person_using_moving_phone_check
                     count = check_func(boxes_by_class, tracks=tracks, frame_id=frame_id)
                 else:
                     count = check_func(boxes_by_class)

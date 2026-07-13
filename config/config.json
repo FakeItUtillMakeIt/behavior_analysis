@@ -12,5 +12,14 @@
     "inertia": 0.1,
     "use_byte": false,
     "min_hits": 1
+  },
+  "person_gather_min_count": 3,
+  "sleeping_threshold": 30,
+  "absent_threshold": 30,
+  "station_detector": {
+    "min_stay_duration": 5000,
+    "position_threshold": 30.0,
+    "min_history_size": 50,
+    "region_expand_ratio": 0.2
   }
 }

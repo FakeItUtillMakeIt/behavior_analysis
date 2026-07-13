@@ -9,6 +9,7 @@ import threading,time,requests
 from PIL import Image
 from logger import inner_logger
 from drawing_utils import draw_alarm_frame
+from scenarios import load_scenario_config
 
 # VideoMAE 相关导入
 try:
@@ -51,6 +52,9 @@ def load_config():
     for key in ['yolo_model', 'videomae_model']:
         if key in _config and not os.path.isabs(_config[key]):
             _config[key] = os.path.join(project_root, _config[key].lstrip('./'))
+    
+    # 加载场景检测配置（聚集、睡岗、离岗阈值）
+    load_scenario_config(_config)
     
     return _config
 
