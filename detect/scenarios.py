@@ -710,6 +710,23 @@ def person_wear_safety_belt_check(det):
     
     return no_safety_belt_num
 
+def person_gathering_check(det,thesh = 3):
+    """聚集检测
+
+    Args:
+        det (_type_): _description_
+        thesh (int, optional): 默认聚集人数.
+    """
+    logger.debug("check person_gathering_check")
+    person_boxs = det[PERSON]
+    if len(person_boxs) < thesh:
+        return 0
+    min_left = min([box[0] for box in person_boxs])
+    min_top = min([box[1] for box in person_boxs])
+    max_right = max([box[2] for box in person_boxs])
+    max_bottom = max([box[3] for box in person_boxs])
+
+    return len(person_boxs)
 
 def person_sleeping_check(det):
     """
@@ -754,11 +771,12 @@ ALARM_MAP = {
     1: person_wear_helmet_check,
     2: person_wear_clothes_check,
     3: person_using_phone_check,
+    #3: person_using_moving_phone_check,
     4: person_smoking_check,
     5: person_falldown_check,
     6: person_wear_safety_belt_check,
-    7: person_sleeping_check,
-    8: person_using_moving_phone_check,
+    7: person_gathering_check,
+    8: person_sleeping_check,
 }
 
 # 告警类型描述
@@ -770,8 +788,9 @@ ALARM_NAMES = {
     4: "抽烟",
     5: "跌倒",
     6: "未系安全带",
-    7: "睡岗",
-    8: "移动打电话",
+    7: "聚集",
+    8: "睡岗",
+    9: "离岗",
     10: "攀爬",
     11: "打架",
 }
