@@ -207,7 +207,7 @@ def handle_detect_stream():
                     data = alert_queue.get(timeout=1)
                     if data is None:
                         # 检测完成
-                        yield f"data: {json.dumps({'type': 'complete'})}\n\n"
+                        #yield f"data: {json.dumps({'type': 'complete'})}\n\n"
                         break
                     
                     # 只推送有告警的数据
@@ -236,11 +236,12 @@ def handle_detect_stream():
                     
                 except queue.Empty:
                     # 超时，发送心跳
-                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                    #yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                    pass
                 except Exception as e:
                     inner_logger.error(f"SSE推送异常: {e}")
                     break
-        
+        pass
         return Response(
             generate(),
             mimetype='text/event-stream',
